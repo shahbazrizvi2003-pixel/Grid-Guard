@@ -1,6 +1,6 @@
 #  GridGuard
 ### Autonomous Cyber Threat Response for Energy Grid Infrastructure
-**Google Cloud Rapid Agent Hackathon — Arize Phoenix MCP Track**
+**Google Cloud Rapid Agent — Arize Phoenix MCP Track**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
@@ -98,7 +98,7 @@ python verify_integrations.py --gemini --attack ddos
 ```
 
 There is no database or migration step. Incident state is intentionally
-in-process for the single-instance hackathon demo and resets on restart. See
+in-process for the single-instance demo and resets on restart. See
 [`GCP_HANDOFF.md`](GCP_HANDOFF.md) for production setup and
 [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) for verified phase status.
 
