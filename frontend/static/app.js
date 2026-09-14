@@ -52,7 +52,7 @@ function initNodes() {
     node.title = id;
     node.innerHTML = `
       <span class="node-icon">⚡</span>
-      <span class="node-id">S${String(i).padStart(3,'0')}</span>
+      <span class="node-id">S${String(i).padStart(3, '0')}</span>
     `;
     node.addEventListener('click', () => showNodeDetail(id));
     map.appendChild(node);
@@ -116,9 +116,51 @@ function nodeIcon(status) {
 
 function showNodeDetail(id) {
   const status = state.nodes[id] || 'NORMAL';
-  const msg = `Node: ${id}\nStatus: ${status}`;
-  // Could expand to a tooltip/popup — keeping simple for now
-  console.log(msg);
+  const telem = state.lastTelemetry && state.lastTelemetry.node_id === id ? state.lastTelemetry : null;
+
+  // Find recent timeline events for this node
+  const nodeEvents = state.timelineEvents
+    .filter(e => e.incident_id && state.timelineEvents.find(
+      t => t.incident_id === e.incident_id
+    ))
+    .slice(0, 3);
+
+  const statusLabel = { THREAT: '🔴 THREAT', INVESTIGATING: '🟡 INVESTIGATING', RESOLVED: '🔵 RESOLVED', NORMAL: '✅ NORMAL' }[status] || status;
+
+  const telemHtml = telem
+    ? `<div style="margin-top:8px;font-size:11px;color:#94a3b8">
+        Voltage: <b>${telem.voltage?.toFixed(1)}V</b> &nbsp;
+        Frequency: <b>${telem.frequency?.toFixed(2)}Hz</b> &nbsp;
+        Status: <b>${telem.status || '—'}</b>
+       </div>`
+    : '';
+
+  // Show as a small toast/popup near the grid
+  let popup = $('node-detail-popup');
+  if (!popup) {
+    popup = document.createElement('div');
+    popup.id = 'node-detail-popup';
+    popup.style.cssText = `
+      position:fixed; bottom:24px; left:24px; z-index:999;
+      background:#1e293b; border:1px solid #334155; border-radius:8px;
+      padding:14px 18px; min-width:240px; max-width:320px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.5); color:#e2e8f0; font-size:13px;
+      cursor:pointer;
+    `;
+    popup.onclick = () => popup.remove();
+    document.body.appendChild(popup);
+  }
+
+  popup.innerHTML = `
+    <div style="font-weight:700;margin-bottom:4px">${escHtml(id)}</div>
+    <div>${statusLabel}</div>
+    ${telemHtml}
+    <div style="margin-top:8px;font-size:10px;color:#64748b">Click to dismiss</div>
+  `;
+
+  // Auto-dismiss after 6 seconds
+  clearTimeout(popup._timer);
+  popup._timer = setTimeout(() => popup?.remove(), 6000);
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -189,17 +231,17 @@ function updateTelemetry(reading) {
   const isAnomaly = reading.status === 'ANOMALY';
 
   const voltageEl = $('telem-voltage');
-  const freqEl    = $('telem-frequency');
-  const nodeEl    = $('telem-node');
-  const statusEl  = $('telem-status');
+  const freqEl = $('telem-frequency');
+  const nodeEl = $('telem-node');
+  const statusEl = $('telem-status');
 
   voltageEl.textContent = reading.voltage ? `${reading.voltage.toFixed(1)} V` : '— V';
-  freqEl.textContent    = reading.frequency ? `${reading.frequency.toFixed(2)} Hz` : '— Hz';
-  nodeEl.textContent    = reading.node_id || '—';
-  statusEl.textContent  = reading.status || 'NORMAL';
+  freqEl.textContent = reading.frequency ? `${reading.frequency.toFixed(2)} Hz` : '— Hz';
+  nodeEl.textContent = reading.node_id || '—';
+  statusEl.textContent = reading.status || 'NORMAL';
 
   voltageEl.className = 'telem-value ' + (isAnomaly ? 'telem-anomaly' : 'telem-normal');
-  statusEl.className  = 'telem-value ' + (isAnomaly ? 'telem-anomaly' : 'telem-normal');
+  statusEl.className = 'telem-value ' + (isAnomaly ? 'telem-anomaly' : 'telem-normal');
 }
 
 // ── Timeline ─────────────────────────────────────────────────────────────────
@@ -208,7 +250,7 @@ function updateTimeline(events) {
 
   // Only add new events we haven't seen yet
   const existingIds = new Set(state.timelineEvents.map(e => e.id));
-  const newEvents   = events.filter(e => !existingIds.has(e.id));
+  const newEvents = events.filter(e => !existingIds.has(e.id));
   if (newEvents.length === 0) return;
 
   state.timelineEvents = events;
@@ -264,12 +306,12 @@ function buildTimelineEntry(ev) {
 function agentIcon(agent, severity) {
   if (severity === 'CRITICAL') return '🚨';
   const icons = {
-    detection_agent:   '🔍',
+    detection_agent: '🔍',
     investigation_agent: '🔬',
-    response_agent:    '⚡',
-    operator:          '👤',
-    gridguard_pipeline:'🤖',
-    system:            '⚙️',
+    response_agent: '⚡',
+    operator: '👤',
+    gridguard_pipeline: '🤖',
+    system: '⚙️',
   };
   return icons[agent] || '•';
 }
@@ -287,11 +329,11 @@ function formatAction(action) {
 function showApprovalModal(approval) {
   state.currentApprovalId = approval.incident_id;
 
-  $('modal-incident-id').textContent     = approval.incident_id || '—';
-  $('modal-classification').textContent  = approval.classification || '—';
-  $('modal-summary').textContent         = approval.summary || '—';
-  $('modal-reasoning').textContent       = approval.ai_reasoning || '—';
-  $('modal-playbook').textContent        = (approval.recommended_playbook || '—').toUpperCase();
+  $('modal-incident-id').textContent = approval.incident_id || '—';
+  $('modal-classification').textContent = approval.classification || '—';
+  $('modal-summary').textContent = approval.summary || '—';
+  $('modal-reasoning').textContent = approval.ai_reasoning || '—';
+  $('modal-playbook').textContent = (approval.recommended_playbook || '—').toUpperCase();
 
   // MITRE techniques
   const mitreEl = $('modal-mitre');
@@ -310,8 +352,8 @@ function showApprovalModal(approval) {
   // Show overlay
   $('approval-overlay').classList.remove('hidden');
 
-  // Start countdown
-  const timeout = approval.timeout_seconds || 60;
+  // Start countdown — use backend timeout if provided, default 120s
+  const timeout = approval.timeout_seconds || 120;
   startApprovalCountdown(timeout);
 }
 
@@ -372,9 +414,15 @@ async function injectAttack(type) {
     const data = await res.json();
 
     if (res.ok) {
-      feedback.textContent = `✓ Attack injected → ${data.target_node} | Agent pipeline starting…`;
-      feedback.style.borderColor = 'rgba(34,197,94,0.4)';
-      feedback.style.color = 'var(--green)';
+      if (data.status === 'already_running') {
+        feedback.textContent = `⚠ ${data.attack_type.replace(/_/g, ' ')} pipeline already running — wait for it to finish`;
+        feedback.style.borderColor = 'rgba(251,191,36,0.4)';
+        feedback.style.color = 'var(--yellow, #fbbf24)';
+      } else {
+        feedback.textContent = `✓ Attack injected → ${data.target_node} | Agent pipeline starting…`;
+        feedback.style.borderColor = 'rgba(34,197,94,0.4)';
+        feedback.style.color = 'var(--green)';
+      }
 
       // Reset feedback after 5s
       setTimeout(() => {
@@ -449,11 +497,11 @@ function openReportModal(report) {
   body.innerHTML = '';
 
   const sections = [
-    { title: 'Executive Summary',       text: report.executive_summary },
-    { title: 'What Happened',           text: report.what_happened },
-    { title: 'What the Agent Did',      text: report.what_agent_did },
-    { title: 'Why Agent Responded',     text: report.why_agent_responded },
-    { title: 'Outcome',                 text: report.outcome },
+    { title: 'Executive Summary', text: report.executive_summary },
+    { title: 'What Happened', text: report.what_happened },
+    { title: 'What the Agent Did', text: report.what_agent_did },
+    { title: 'Why Agent Responded', text: report.why_agent_responded },
+    { title: 'Outcome', text: report.outcome },
   ];
 
   sections.forEach(s => {
@@ -474,8 +522,8 @@ function openReportModal(report) {
     sec.innerHTML = `<div class="report-section-title">MITRE ATT&CK ICS Techniques</div>
       <div class="report-tags">
         ${report.mitre_techniques.map(t =>
-          `<span class="report-tag tag-mitre" title="${escHtml(t.url || '')}">${escHtml(t.id)} — ${escHtml(t.name)}</span>`
-        ).join('')}
+      `<span class="report-tag tag-mitre" title="${escHtml(t.url || '')}">${escHtml(t.id)} — ${escHtml(t.name)}</span>`
+    ).join('')}
       </div>`;
     body.appendChild(sec);
   }
@@ -487,8 +535,8 @@ function openReportModal(report) {
     sec.innerHTML = `<div class="report-section-title">CVEs Identified</div>
       <div class="report-tags">
         ${report.cves.map(c =>
-          `<span class="report-tag tag-cve">${escHtml(c.id)} CVSS:${c.cvss_score || '?'} (${escHtml(c.severity || '?')})</span>`
-        ).join('')}
+      `<span class="report-tag tag-cve">${escHtml(c.id)} CVSS:${c.cvss_score || '?'} (${escHtml(c.severity || '?')})</span>`
+    ).join('')}
       </div>`;
     body.appendChild(sec);
   }
@@ -500,8 +548,8 @@ function openReportModal(report) {
     sec.innerHTML = `<div class="report-section-title">Actions Executed</div>
       <div class="report-tags">
         ${report.actions_taken.map(a =>
-          `<span class="report-tag tag-action">${escHtml(a.replace(/_/g,' '))}</span>`
-        ).join('')}
+      `<span class="report-tag tag-action">${escHtml(a.replace(/_/g, ' '))}</span>`
+    ).join('')}
       </div>`;
     body.appendChild(sec);
   }
@@ -577,15 +625,15 @@ async function pollPhoenixStats() {
     if (!res.ok) return;
     const data = await res.json();
 
-    $('pstat-traces').textContent       = data.total_traces ?? '—';
+    $('pstat-traces').textContent = data.total_traces ?? '—';
     $('pstat-hallucinations').textContent = data.hallucination_flags ?? '—';
-    $('pstat-quality').textContent      = data.avg_quality_score != null
+    $('pstat-quality').textContent = data.avg_quality_score != null
       ? data.avg_quality_score.toFixed(2)
       : '—';
     const observable = data.status === 'connected' || data.status === 'local';
     const phoenixDisabled = data.status === 'disabled';
-    $('pstat-status').textContent       = data.status === 'connected' ? '✓ Cloud' : (data.status === 'local' ? '✓ Local' : (phoenixDisabled ? '○ Disabled' : '⚠ Offline'));
-    $('pstat-status').className         = 'pstat-value ' + (observable ? 'pstat-good' : 'pstat-warn');
+    $('pstat-status').textContent = data.status === 'connected' ? '✓ Cloud' : (data.status === 'local' ? '✓ Local' : (phoenixDisabled ? '○ Disabled' : '⚠ Offline'));
+    $('pstat-status').className = 'pstat-value ' + (observable ? 'pstat-good' : 'pstat-warn');
 
     $('pill-phoenix-val').textContent = observable
       ? `Observability: ${data.total_traces} traces`

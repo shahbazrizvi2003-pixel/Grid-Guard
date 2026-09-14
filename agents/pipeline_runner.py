@@ -42,8 +42,9 @@ _runner = Runner(
     session_service=_session_service,
 )
 
-# Track running pipeline tasks so we don't double-trigger
-_active_pipelines: set[str] = set()
+# Track running pipeline tasks: attack_type -> start timestamp
+_active_pipelines: dict[str, float] = {}
+_PIPELINE_TIMEOUT_S = 300  # 5 minutes — allow re-trigger after this
 
 
 async def run_pipeline_for_attack(
@@ -65,11 +66,13 @@ async def run_pipeline_for_attack(
     """
     incident_id = f"INC-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
 
-    # Prevent duplicate pipeline runs for the same active attack
-    if attack_type in _active_pipelines:
+    import time as _time
+    now_ts = _time.time()
+    started_at = _active_pipelines.get(attack_type)
+    if started_at and (now_ts - started_at) < _PIPELINE_TIMEOUT_S:
         return {"status": "already_running", "attack_type": attack_type}
 
-    _active_pipelines.add(attack_type)
+    _active_pipelines[attack_type] = now_ts
     register_incident(incident_id, attack_type, node_id)
 
     add_timeline_event(
@@ -182,19 +185,24 @@ async def run_pipeline_for_attack(
         return result
 
     except Exception as e:
-        fail_incident(incident_id, str(e))
+        from agents.model_config import get_model_error_hint
+        error_str = str(e)
+        hint = get_model_error_hint(error_str)
+        # Log the full error to console so it's visible in terminal
+        print(f"\n[PIPELINE ERROR] {incident_id}: {error_str}\n[HINT] {hint}\n")
+        fail_incident(incident_id, hint)
         add_timeline_event(
             agent_name="gridguard_pipeline",
             action="pipeline_error",
-            reasoning=f"Pipeline error for {incident_id}: {str(e)[:200]}",
+            reasoning=f"Pipeline error for {incident_id}: {hint}",
             confidence=0.0,
             outcome="error",
             severity="CRITICAL",
             incident_id=incident_id,
         )
-        return {"status": "error", "incident_id": incident_id, "message": str(e)}
+        return {"status": "error", "incident_id": incident_id, "message": hint}
     finally:
-        _active_pipelines.discard(attack_type)
+        _active_pipelines.pop(attack_type, None)
 
 
 def _build_mission_prompt(

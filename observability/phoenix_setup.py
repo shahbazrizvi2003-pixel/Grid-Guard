@@ -40,11 +40,16 @@ def initialize_phoenix():
 
     from phoenix.otel import register
 
+    # Build the correct OTLP collector endpoint for Arize Phoenix cloud.
+    # The register() function needs the full OTLP HTTP endpoint.
+    otlp_endpoint = "https://app.phoenix.arize.com/v1/traces"
+
     # Register Phoenix as the OTel tracing backend
     global tracer_provider
     tracer_provider = register(
         project_name=project_name,
         api_key=phoenix_api_key,
+        endpoint=otlp_endpoint,
         batch=True,
         verbose=False,
     )

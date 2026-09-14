@@ -6,7 +6,7 @@ Reports are stored in memory and served by the dashboard.
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 # In-memory store of resolved incident reports (served to dashboard)
@@ -20,9 +20,9 @@ def get_all_reports() -> list[dict]:
 
 def generate_incident_report(
     incident_id: str,
-    detection_result: dict,
-    investigation_result: dict,
-    response_result: dict,
+    detection_result: str,
+    investigation_result: str,
+    response_result: str,
     approval_status: str = "not_required"
 ) -> dict[str, Any]:
     """
@@ -30,15 +30,29 @@ def generate_incident_report(
 
     Args:
         incident_id: Unique incident identifier
-        detection_result: Output from detection agent
-        investigation_result: Output from investigation agent
-        response_result: Output from response agent
+        detection_result: JSON string output from detection agent
+        investigation_result: JSON string output from investigation agent
+        response_result: JSON string output from response agent
         approval_status: Whether human approved the response
 
     Returns:
         Structured incident report saved to memory and returned.
     """
-    now = datetime.utcnow()
+    import json as _json
+
+    def _parse(val):
+        if isinstance(val, dict):
+            return val
+        try:
+            return _json.loads(val) if val else {}
+        except Exception:
+            return {}
+
+    detection_result = _parse(detection_result)
+    investigation_result = _parse(investigation_result)
+    response_result = _parse(response_result)
+
+    now = datetime.now(timezone.utc)
 
     # Extract key data
     anomaly_type = detection_result.get("type", "unknown")
@@ -100,7 +114,7 @@ def generate_incident_report(
         # Response
         "playbook_executed": playbook_used,
         "actions_count": len(actions_taken),
-        "actions_taken": [a.get("action", "") for a in actions_taken],
+        "actions_taken": [a.get("action", "") if isinstance(a, dict) else str(a) for a in actions_taken],
         "human_approval": approval_status,
         "execution_status": execution_status,
 
@@ -137,7 +151,7 @@ def _build_narrative(
         for t in (mitre_techniques if isinstance(mitre_techniques, list) else [])
     ][:2]
     cve_ids = [c.get("id", "") for c in (cves if isinstance(cves, list) else [])][:2]
-    action_names = [a.get("action", "") for a in actions_taken][:3]
+    action_names = [a.get("action", "") if isinstance(a, dict) else str(a) for a in actions_taken][:3]
 
     summary = (
         f"A {classification} {attack_readable} attack was detected on grid node {node_id}. "

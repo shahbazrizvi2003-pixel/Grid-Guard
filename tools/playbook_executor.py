@@ -45,20 +45,30 @@ def _load_playbook(playbook_name: str) -> dict:
 def execute_playbook(
     playbook_name: str,
     incident_id: str,
-    threat_context: dict | None = None
+    threat_context: str = None
 ) -> dict[str, Any]:
     """
     Execute a threat response playbook.
 
     Args:
-        playbook_name: Name of the playbook (e.g. 'ransomware', 'ddos')
+        playbook_name: Name of the playbook (e.g. ransomware, ddos)
         incident_id: Unique identifier for this incident
-        threat_context: Optional dict with threat details for logging
+        threat_context: Optional JSON string with threat details for logging
 
     Returns:
         Dict with execution results: actions_taken, status, timestamp, duration_ms
     """
+    import json as _json
     start_time = time.time()
+    context_dict = None
+    if threat_context:
+        if isinstance(threat_context, dict):
+            context_dict = threat_context
+        else:
+            try:
+                context_dict = _json.loads(threat_context)
+            except Exception:
+                context_dict = None
 
     try:
         playbook = _load_playbook(playbook_name)
@@ -142,15 +152,15 @@ def _simulate_action(action: str, target: str, method: str) -> str:
     return action_responses.get(action, f"Action '{action}' executed on {target}")
 
 
-def request_human_approval(
+async def request_human_approval(
     incident_id: str,
     threat_classification: str,
     threat_summary: str,
     ai_reasoning: str,
     recommended_playbook: str,
-    mitre_techniques: list | None = None,
-    cves: list | None = None,
-    timeout_seconds: int = 60
+    mitre_techniques: list = None,
+    cves: list = None,
+    timeout_seconds: int = 120
 ) -> dict[str, Any]:
     """
     Request human approval before executing a CRITICAL threat response.
@@ -158,7 +168,7 @@ def request_human_approval(
 
     Args:
         incident_id: Unique incident identifier
-        threat_classification: CRITICAL | HIGH
+        threat_classification: CRITICAL or HIGH
         threat_summary: Plain-English description of the threat
         ai_reasoning: Full AI reasoning chain for the operator to review
         recommended_playbook: The playbook the agent wants to execute
@@ -167,8 +177,9 @@ def request_human_approval(
         timeout_seconds: How long to wait before auto-escalating
 
     Returns:
-        Dict with approval_status: 'approved' | 'rejected' | 'timeout' | 'escalated'
+        Dict with approval_status: approved, rejected, timeout, or escalated
     """
+    import asyncio
     from frontend.state import clear_pending_approval, push_approval_request, get_approval_result
 
     approval_payload = {
@@ -184,10 +195,11 @@ def request_human_approval(
         "status": "pending"
     }
 
-    # Push to dashboard state — frontend will render the approval card
+    # Push to dashboard state — frontend will render the approval modal
     push_approval_request(approval_payload)
 
-    # Poll for operator response
+    # Poll using async sleep so the FastAPI event loop stays unblocked
+    # and WebSocket broadcasts keep flowing to the browser
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         result = get_approval_result(incident_id)
@@ -198,7 +210,7 @@ def request_human_approval(
                 "responded_at": datetime.utcnow().isoformat(),
                 "waited_seconds": int(timeout_seconds - (deadline - time.time()))
             }
-        time.sleep(1)
+        await asyncio.sleep(2)
 
     # Timeout — escalate automatically
     clear_pending_approval(incident_id)

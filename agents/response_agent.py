@@ -72,7 +72,7 @@ response_agent = LlmAgent(
       "response_status": "<executed|false_positive|operator_rejected|escalated>",
       "playbook": "<playbook name executed or 'none'>",
       "approval_status": "<approved|not_required|rejected|timeout>",
-      "actions_summary": ["<action1>", "<action2>", ...],
+      "actions_taken": ["<action1>", "<action2>", ...],
       "report_generated": true,
       "phoenix_mcp_verified": <true|false>,
       "response_summary": "<2-3 sentences plain English summary of what happened>"

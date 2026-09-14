@@ -63,16 +63,14 @@ app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 # ── WebSocket connection manager ──────────────────────────────────────────────
 class ConnectionManager:
     def __init__(self):
-        self.active: list[WebSocket] = []
+        self.active: set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
-        self.active.append(ws)
+        self.active.add(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.discard(ws) if hasattr(self.active, 'discard') else None
-        if ws in self.active:
-            self.active.remove(ws)
+        self.active.discard(ws)
 
     async def broadcast(self, data: dict):
         dead = []
@@ -138,6 +136,19 @@ async def inject_attack(attack_type: str, background_tasks: BackgroundTasks):
 
     # Import here to avoid circular imports at module load
     from simulator.scada_simulator import simulator
+    from agents.pipeline_runner import _active_pipelines, _PIPELINE_TIMEOUT_S
+    import time as _time
+
+    # Check if same attack type is already running
+    started_at = _active_pipelines.get(attack_type)
+    if started_at and (_time.time() - started_at) < _PIPELINE_TIMEOUT_S:
+        return {
+            "status": "already_running",
+            "attack_type": attack_type,
+            "message": f"A {attack_type} pipeline is already running. Wait for it to finish.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
     result = simulator.inject_attack(attack_type)
     node_id = result["target_node"]
 

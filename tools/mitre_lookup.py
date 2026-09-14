@@ -90,9 +90,18 @@ FALLBACK_TECHNIQUES: dict[str, list[dict]] = {
 }
 
 
+_CACHE_TTL_DAYS = 7
+
+
 def _load_mitre_cache() -> dict | None:
-    """Load cached MITRE STIX data from disk."""
+    """Load cached MITRE STIX data from disk, invalidating if older than 7 days."""
     if CACHE_PATH.exists():
+        import time as _time
+        age_days = (_time.time() - CACHE_PATH.stat().st_mtime) / 86400
+        if age_days > _CACHE_TTL_DAYS:
+            print(f"[mitre_lookup] Cache expired ({age_days:.1f} days old) — refreshing")
+            CACHE_PATH.unlink(missing_ok=True)
+            return None
         try:
             with open(CACHE_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
